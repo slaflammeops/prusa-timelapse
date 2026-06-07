@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Prusa Timelapse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:#0f1117;--surface:#181c25;--surface2:#1e2330;
+  --border:rgba(255,255,255,0.07);--border-h:rgba(255,255,255,0.14);
+  --text:#e8eaf0;--muted:#6b7280;
+  --accent:#00d4a0;--accent-dim:rgba(0,212,160,0.12);--accent-dim2:rgba(0,212,160,0.05);
+  --red:#ff5c5c;--red-dim:rgba(255,92,92,0.12);
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.12);
+  --blue:#60a5fa;--blue-dim:rgba(96,165,250,0.12);
+  --radius:10px;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.6}
+body{min-height:100vh;display:flex;flex-direction:column}
+
+header{padding:1rem 1.75rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;background:var(--surface)}
+.logo{display:flex;align-items:center;gap:.6rem}
+.logo-mark{width:30px;height:30px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center}
+.logo-mark svg{width:16px;height:16px}
+.logo-name{font-size:14px;font-weight:500}
+.logo-name span{color:var(--muted);font-weight:300}
+.hstatus{margin-left:auto;display:flex;align-items:center;gap:.5rem;font-size:13px;color:var(--muted)}
+.hdot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s,box-shadow .3s}
+.hdot.live{background:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+
+main{flex:1;display:grid;grid-template-columns:240px 1fr;min-height:0}
+nav{background:var(--surface);border-right:1px solid var(--border);padding:1.25rem 0;display:flex;flex-direction:column;gap:.2rem}
+.ni{display:flex;align-items:center;gap:.7rem;padding:.55rem 1.25rem;cursor:pointer;font-size:14px;color:var(--muted);transition:color .15s,background .15s;border-left:2px solid transparent}
+.ni svg{width:16px;height:16px;flex-shrink:0;opacity:.6}
+.ni:hover{color:var(--text);background:var(--accent-dim2)}
+.ni.active{color:var(--accent);background:var(--accent-dim);border-left-color:var(--accent)}
+.ni.active svg{opacity:1}
+.ndiv{height:1px;background:var(--border);margin:.6rem 1.25rem}
+
+.pane{display:none;padding:1.75rem;overflow-y:auto;max-height:calc(100vh - 57px)}
+.pane.active{display:block}
+.ptitle{font-size:19px;font-weight:500;margin-bottom:1.5rem}
+.ptitle span{color:var(--muted);font-weight:300}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem}
+.ctitle{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1rem}
+
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-bottom:1rem}
+.metric{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1.1rem}
+.mlabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem}
+.mval{font-family:var(--mono);font-size:22px;font-weight:500}
+.mval.ac{color:var(--accent)}
+
+.preview{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;margin-bottom:1rem;overflow:hidden;position:relative}
+.ph{text-align:center;color:var(--muted)}
+.ph svg{width:36px;height:36px;margin-bottom:.6rem;opacity:.35;display:block;margin-inline:auto}
+.ph p{font-size:13px}
+#preview-img{width:100%;height:100%;object-fit:cover;display:none}
+.pts{position:absolute;bottom:8px;right:10px;font-family:var(--mono);font-size:11px;color:rgba(255,255,255,.5);background:rgba(0,0,0,.55);padding:2px 7px;border-radius:4px;display:none}
+
+.log{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .9rem;font-family:var(--mono);font-size:12px;height:130px;overflow-y:auto;margin-top:1rem}
+.ll{padding:2px 0;display:flex;gap:.5rem}
+.ll .ts{color:rgba(255,255,255,.18);flex-shrink:0}
+.ll.ok .msg{color:var(--accent)}
+.ll.err .msg{color:var(--red)}
+.ll.info .msg{color:var(--blue)}
+.ll.warn .msg{color:var(--amber)}
+.ll .msg{color:var(--muted)}
+
+.btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.75rem}
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.45rem 1rem;border-radius:8px;font-size:13px;font-weight:500;border:1px solid var(--border-h);background:transparent;color:var(--text);cursor:pointer;transition:background .15s,transform .1s;font-family:var(--font)}
+.btn svg{width:14px;height:14px}
+.btn:hover{background:var(--surface2)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.btn.green{background:var(--accent);border-color:var(--accent);color:#071a12}
+.btn.green:hover{background:#00bfa0}
+.btn.red{background:var(--red);border-color:var(--red);color:#1a0505}
+.btn.red:hover{background:#e04444}
+
+.session-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .7rem;background:var(--accent-dim);border:1px solid rgba(0,212,160,.2);border-radius:6px;font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:1rem}
+
+.field{margin-bottom:.9rem}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em}
+.field input,.field select{width:100%;padding:.5rem .8rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field select option{background:var(--surface2)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+
+.range-row{display:flex;align-items:center;gap:.9rem}
+.range-row input[type=range]{flex:1;accent-color:var(--accent)}
+.rval{font-family:var(--mono);font-size:13px;color:var(--accent);min-width:3rem;text-align:right}
+
+.url-pill{display:inline-block;background:var(--accent-dim);border:1px solid rgba(0,212,160,.18);border-radius:6px;padding:.28rem .7rem;font-family:var(--mono);font-size:12px;color:var(--accent);margin-top:.4rem;word-break:break-all}
+
+.alert{padding:.7rem .9rem;border-radius:8px;font-size:13px;display:flex;align-items:flex-start;gap:.55rem;margin-bottom:1rem}
+.alert svg{width:15px;height:15px;flex-shrink:0;margin-top:2px}
+.alert.info{background:var(--blue-dim);border:1px solid rgba(96,165,250,.2);color:var(--blue)}
+.alert.ok{background:var(--accent-dim);border:1px solid rgba(0,212,160,.2);color:var(--accent)}
+
+.slist{display:flex;flex-direction:column;gap:.6rem}
+.sitem{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.sitem-name{font-family:var(--mono);font-size:13px;color:var(--text);flex:1;min-width:0}
+.sitem-meta{font-size:12px;color:var(--muted);white-space:nowrap}
+.sitem-actions{display:flex;gap:.4rem;flex-shrink:0}
+.sbadge{font-size:11px;padding:2px 8px;border-radius:5px;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,212,160,.2);white-space:nowrap}
+.sbadge.built{background:var(--blue-dim);color:var(--blue);border-color:rgba(96,165,250,.2)}
+.ibtn{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .65rem;border-radius:6px;border:1px solid var(--border-h);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--font);transition:color .15s,border-color .15s;text-decoration:none}
+.ibtn:hover{color:var(--accent);border-color:var(--accent)}
+.ibtn.del:hover{color:var(--red);border-color:var(--red)}
+.ibtn svg{width:13px;height:13px}
+
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-h);border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#071a12" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12h3M19 12h3M12 2v3M12 19v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+    </div>
+    <span class="logo-name">Prusa Timelapse <span>/ Buddy3D</span></span>
+  </div>
+  <div class="hstatus">
+    <div class="hdot" id="hdot"></div>
+    <span id="htext">Idle</span>
+  </div>
+</header>
+
+<main>
+  <nav>
+    <div class="ni active" data-pane="capture" onclick="showPane(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M3 9h2l2-3h10l2 3h2a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V10a1 1 0 011-1z"/></svg>
+      Capture
+    </div>
+    <div class="ni" data-pane="sessions" onclick="showPane(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Sessions
+    </div>
+    <div class="ndiv"></div>
+    <div class="ni" data-pane="settings" onclick="showPane(this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </div>
+  </nav>
+
+  <!-- CAPTURE -->
+  <div class="pane active" id="pane-capture">
+    <div class="ptitle">Capture <span>/ live session</span></div>
+
+    <div class="session-badge" id="session-badge" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:13px;height:13px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span id="session-name-display">—</span>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="mlabel">Frames</div><div class="mval ac" id="m-frames">0</div></div>
+      <div class="metric"><div class="mlabel">Elapsed</div><div class="mval" id="m-elapsed">0:00</div></div>
+      <div class="metric"><div class="mlabel">Est. video</div><div class="mval" id="m-video">0s</div></div>
+    </div>
+
+    <div class="preview" id="preview-box">
+      <div class="ph" id="preview-ph">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/><line x1="1" y1="5" x2="16" y2="19" opacity=".3"/></svg>
+        <p>Start capturing to see a preview</p>
+      </div>
+      <img id="preview-img" alt="Latest frame"/>
+      <div class="pts" id="preview-ts"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn green" id="btn-start" onclick="startCapture()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+        Start capture
+      </button>
+      <button class="btn red" id="btn-stop" onclick="stopCapture()" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        Stop
+      </button>
+    </div>
+
+    <div class="log" id="log">
+      <div class="ll"><span class="ts">--:--:--</span><span class="msg">Waiting to start…</span></div>
+    </div>
+  </div>
+
+  <!-- SESSIONS -->
+  <div class="pane" id="pane-sessions">
+    <div class="ptitle">Sessions <span>/ all prints</span></div>
+    <div id="sessions-wrap">
+      <div class="alert info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        No sessions yet — start a capture first.
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="pane" id="pane-settings">
+    <div class="ptitle">Settings <span>/ configuration</span></div>
+    <div class="card">
+      <div class="ctitle">Camera</div>
+      <div class="g2">
+        <div class="field">
+          <label>Camera IP address</label>
+          <input type="text" id="s-ip" value="192.168.1.42" oninput="saveSettings()"/>
+        </div>
+        <div class="field">
+          <label>RTSP path</label>
+          <input type="text" id="s-path" value="/live" oninput="saveSettings()"/>
+        </div>
+      </div>
+      <div>
+        <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Stream URL</span>
+        <div class="url-pill" id="url-pill">rtsp://192.168.1.42/live</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctitle">Capture</div>
+      <div class="field">
+        <label>Interval — one frame every <span id="iv-label" style="color:var(--accent)">30s</span></label>
+        <div class="range-row">
+          <input type="range" id="s-interval" min="1" max="120" step="1" value="30"
+            oninput="document.getElementById('iv-label').textContent=this.value+'s';document.getElementById('iv-disp').textContent=this.value+'s';saveSettings()"/>
+          <span class="rval" id="iv-disp">30s</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctitle">Video output</div>
+      <div class="field">
+        <label>Playback FPS</label>
+        <select id="s-fps" onchange="saveSettings()">
+          <option value="12">12 fps — cinematic / slow</option>
+          <option value="24" selected>24 fps — standard</option>
+          <option value="30">30 fps — smooth</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctitle">Storage locations</div>
+      <div class="field">
+        <label>Frames (JPEGs)</label>
+        <div class="url-pill">\\\\YOUR-NAS-IP\\your-share\\frames</div>
+      </div>
+      <div class="field">
+        <label>Videos (MP4s)</label>
+        <div class="url-pill">\\\\YOUR-NAS-IP\\your-share\\videos</div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>SMB share</label>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-top:.4rem">
+          <div class="url-pill">\\\\YOUR-NAS-IP\\your-share</div>
+          <button class="ibtn" onclick="copySmb()" id="smb-copy-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert ok">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Settings are saved automatically and persist across sessions.
+    </div>
+  </div>
+</main>
+
+<script>
+const API = '';
+
+function gs() {
+  return {
+    ip:       document.getElementById('s-ip').value.trim(),
+    path:     document.getElementById('s-path').value.trim(),
+    interval: parseInt(document.getElementById('s-interval').value),
+    fps:      parseInt(document.getElementById('s-fps').value),
+  };
+}
+
+function saveSettings() {
+  const s = gs();
+  localStorage.setItem('ptl', JSON.stringify(s));
+  document.getElementById('url-pill').textContent = `rtsp://${s.ip}${s.path}`;
+}
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('ptl') || '{}');
+    if (s.ip)       document.getElementById('s-ip').value = s.ip;
+    if (s.path)     document.getElementById('s-path').value = s.path;
+    if (s.interval) {
+      document.getElementById('s-interval').value = s.interval;
+      document.getElementById('iv-label').textContent = s.interval + 's';
+      document.getElementById('iv-disp').textContent = s.interval + 's';
+    }
+    if (s.fps) document.getElementById('s-fps').value = s.fps;
+    const ss = gs();
+    document.getElementById('url-pill').textContent = `rtsp://${ss.ip}${ss.path}`;
+  } catch(e) {}
+}
+
+function showPane(el) {
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-' + el.dataset.pane).classList.add('active');
+  if (el.dataset.pane === 'sessions') renderSessions();
+}
+
+function addLog(msg, level='') {
+  const log = document.getElementById('log');
+  if (log.children.length === 1 && !log.children[0].classList.contains('ll')) log.innerHTML = '';
+  const ts = new Date().toLocaleTimeString('en-CA', {hour12:false});
+  const d = document.createElement('div');
+  d.className = 'll ' + level;
+  d.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function startCapture() {
+  const s = gs();
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+  try {
+    const r = await fetch(API + '/api/capture/start', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({cam_ip: s.ip, rtsp_path: s.path, interval: s.interval})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('hdot').classList.add('live');
+      document.getElementById('htext').textContent = 'Capturing';
+      document.getElementById('session-badge').style.display = 'inline-flex';
+      document.getElementById('session-name-display').textContent = d.session;
+      addLog(`Session: ${d.session}`, 'ok');
+      addLog(`Frame every ${s.interval}s`, 'info');
+    } else {
+      addLog('Error: ' + d.error, 'err');
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').disabled = true;
+    }
+  } catch(e) {
+    addLog('Could not reach server: ' + e.message, 'err');
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled = true;
+  }
+}
+
+async function stopCapture() {
+  document.getElementById('btn-stop').disabled = true;
+  try {
+    const r = await fetch(API + '/api/capture/stop', {method:'POST'});
+    const d = await r.json();
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('hdot').classList.remove('live');
+    document.getElementById('htext').textContent = 'Idle';
+    if (d.ok) {
+      addLog(`Stopped — ${d.frames} frames in ${d.session}`, 'ok');
+      addLog('Go to Sessions tab to build the video', 'info');
+    } else {
+      addLog('Error: ' + d.error, 'err');
+    }
+  } catch(e) { addLog('Server error: ' + e.message, 'err'); }
+}
+
+async function buildSession(session) {
+  const s = gs();
+  addLog(`Building ${session}…`, 'info');
+  try {
+    const r = await fetch(API + '/api/build', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({session, fps: s.fps})
+    });
+    const d = await r.json();
+    if (!d.ok) addLog('Error: ' + d.error, 'err');
+    else renderSessions();
+  } catch(e) { addLog('Server error: ' + e.message, 'err'); }
+}
+
+async function deleteSession(session) {
+  if (!confirm(`Delete session ${session} and its video?`)) return;
+  try {
+    await fetch(API + '/api/delete_session', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({session})
+    });
+    renderSessions();
+  } catch(e) { addLog('Server error: ' + e.message, 'err'); }
+}
+
+async function renderSessions() {
+  try {
+    const r = await fetch(API + '/api/status');
+    const d = await r.json();
+    const wrap = document.getElementById('sessions-wrap');
+    if (!d.sessions || d.sessions.length === 0) {
+      wrap.innerHTML = `<div class="alert info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>No sessions yet — start a capture first.</div>`;
+      return;
+    }
+    wrap.innerHTML = `<div class="slist">${d.sessions.map(s => `
+      <div class="sitem">
+        <span class="sitem-name">${s.name}</span>
+        <span class="sitem-meta">${s.frames} frames</span>
+        <span class="sbadge ${s.built ? 'built' : ''}">${s.built ? 'Video ready' : 'Not built'}</span>
+        <div class="sitem-actions">
+          ${s.built ? `<a class="ibtn" href="/api/videos/${s.name}.mp4" download="${s.name}.mp4">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</a>` : ''}
+          ${!s.built ? `<button class="ibtn" onclick="buildSession('${s.name}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Build</button>` : ''}
+          <button class="ibtn del" onclick="deleteSession('${s.name}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>Delete</button>
+        </div>
+      </div>`).join('')}</div>`;
+  } catch(e) {}
+}
+
+async function poll() {
+  try {
+    const r = await fetch(API + '/api/status');
+    const d = await r.json();
+
+    document.getElementById('m-frames').textContent = d.frames;
+    const fps = gs().fps;
+    const estSec = Math.round(d.frames / fps);
+    document.getElementById('m-video').textContent = estSec < 60 ? estSec + 's' : Math.floor(estSec/60) + 'm' + String(estSec%60).padStart(2,'0') + 's';
+
+    if (d.capturing) {
+      const e = d.elapsed;
+      document.getElementById('m-elapsed').textContent = Math.floor(e/60) + ':' + String(e%60).padStart(2,'0');
+      document.getElementById('hdot').classList.add('live');
+      document.getElementById('htext').textContent = 'Capturing';
+      document.getElementById('btn-start').disabled = true;
+      document.getElementById('btn-stop').disabled = false;
+      if (d.session) {
+        document.getElementById('session-badge').style.display = 'inline-flex';
+        document.getElementById('session-name-display').textContent = d.session;
+      }
+    }
+
+    if (d.building) document.getElementById('htext').textContent = 'Building…';
+
+    if (d.log && d.log.length > 0) {
+      const log = document.getElementById('log');
+      const last = log.lastElementChild?.querySelector('.msg')?.textContent;
+      const latest = d.log[d.log.length - 1];
+      if (latest.msg !== last) {
+        log.innerHTML = '';
+        d.log.slice(-30).forEach(entry => {
+          const div = document.createElement('div');
+          div.className = 'll ' + (entry.level || '');
+          div.innerHTML = `<span class="ts">${entry.ts}</span><span class="msg">${entry.msg}</span>`;
+          log.appendChild(div);
+        });
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  } catch(e) {}
+
+  if (!document.getElementById('btn-stop').disabled) {
+    try {
+      const tmp = new Image();
+      tmp.onload = () => {
+        const img = document.getElementById('preview-img');
+        img.src = tmp.src;
+        img.style.display = 'block';
+        document.getElementById('preview-ph').style.display = 'none';
+        document.getElementById('preview-ts').style.display = 'block';
+        document.getElementById('preview-ts').textContent = new Date().toLocaleTimeString('en-CA', {hour12:false});
+      };
+      tmp.src = API + '/api/preview?t=' + Date.now();
+    } catch(e) {}
+  }
+}
+
+function copySmb() {
+  navigator.clipboard.writeText('\\\\YOUR-NAS-IP\\your-share').catch(()=>{});
+  const btn = document.getElementById('smb-copy-btn');
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Copied`;
+  setTimeout(() => {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
+  }, 1500);
+}
+
+loadSettings();
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>
